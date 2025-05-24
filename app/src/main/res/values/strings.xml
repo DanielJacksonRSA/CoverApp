@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">CoverApp</string>
+    <string name="power">Power</string>
+    <string name="volume">Volume</string>
+    <string name="scroll">Scroll</string>
+    <string name="swipe">Swipe</string>
+    <string name="simulateTouch">Touch</string>
+    <string name="accessibility_service_description">Accessibility</string>
+    <string name="accessibility_service_label">Accessibility</string>
+    <string name="simulateDoubleTouch">2 Tap</string>
+    <string name="scrollUp">Scroll U</string>
+    <string name="scrollDown">Scroll D</string>
+    <string name="swipeLeft">Swipe L</string>
+    <string name="swipeRight">Swipe R</string>
+</resources>
