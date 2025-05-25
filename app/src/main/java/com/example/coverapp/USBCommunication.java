@@ -34,6 +34,7 @@ public class USBCommunication {
     Context context;
     Handler handler;
     Intent intent;
+    boolean connected = false;
 
     public USBCommunication(Context context, Handler handler) {
         this.context = context;
@@ -57,7 +58,8 @@ public class USBCommunication {
         assert usbManager != null;
         HashMap<String, UsbDevice> deviceList = usbManager.getDeviceList();
         for (UsbDevice device : deviceList.values()) {
-            if (device.getVendorId() == 6790) { // Arduino Vendor ID
+            if (device.getVendorId() == 6790) {// Arduino Vendor ID
+                connected = true;
                 if (usbManager.hasPermission(device)) {
                     Log.d("USB Permission", "Already granted.");
                     openUsbDevice(device);
@@ -77,6 +79,9 @@ public class USBCommunication {
 
                 }
             }
+        }
+        if (!connected) {
+            System.exit(0);
         }
     }
 
