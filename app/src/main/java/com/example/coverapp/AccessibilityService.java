@@ -7,6 +7,7 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 
 import android.accessibilityservice.GestureDescription;
 
+import android.annotation.SuppressLint;
 import android.content.pm.ApplicationInfo;
 
 import android.content.pm.PackageManager;
@@ -23,6 +24,7 @@ import android.os.Handler;
 
 import android.os.Looper;
 
+import android.util.DisplayMetrics;
 import android.util.Log;
 
 import android.view.Gravity;
@@ -54,7 +56,9 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
     private static final String TAG = "AccessibilityServiceExample";
     FrameLayout mLayout;
     Button swipeButton;
-    public static Button power;
+    public static Button power, btnDoubleTap;
+    public static Button home, swipeRightButton, swipeLeftButton;
+    public static Button volumeUpButton, btnSimulateTouch, scrollButton, scrollUpButton;
 
 
     @Override
@@ -107,9 +111,20 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
         configureSwipeButton();
         configureSwipeRightButton();
         configureScrollUpButton();
-        configure2SimulateTouch();
+        configureHomeButton();
+        configureSimulateDoubleTap();
         Handler handler = new Handler(Looper.getMainLooper());
         USBCommunication usbCommunication = new USBCommunication(this, handler);
+    }
+
+    private void configureHomeButton() {
+        home = mLayout.findViewById(R.id.btnHome);
+        home.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                performGlobalAction(GLOBAL_ACTION_HOME);
+            }
+        });
     }
 
     private void configurePowerButton() {
@@ -117,20 +132,15 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
         power.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                powerButton();
+                performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
             }
         });
 
     }
 
-    public void powerButton() {
-        performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
-
-    }
-
 
     private void configureVolumeButton() {
-        Button volumeUpButton = mLayout.findViewById(R.id.button2);
+        volumeUpButton = mLayout.findViewById(R.id.button2);
         volumeUpButton.setOnClickListener(new View.OnClickListener() {
 
             @Override
@@ -143,49 +153,27 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
 
 
     private void configureSimulateTouch() {
-        Button btnSimulateTouch = mLayout.findViewById(R.id.simulateTouch);
+        btnSimulateTouch = mLayout.findViewById(R.id.simulateTouch);
         btnSimulateTouch.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Log.e(TAG, "onClick: Simulate Touch");
-                Path tap = new Path();
-                tap.moveTo(500, 1000);
-                GestureDescription.Builder tapBuilder = new GestureDescription.Builder();
-                tapBuilder.addStroke(new GestureDescription.StrokeDescription(tap, 0, 500));
-                dispatchGesture(tapBuilder.build(), null, null);
-            }
-        });
-    }
+                Log.e(TAG, "onClick: Simulate Touch");
 
-    private void configure2SimulateTouch(){
-        Button btnSimulateTouch = mLayout.findViewById(R.id.simulateTouch);
-        btnSimulateTouch.setOnClickListener(new View.OnClickListener() {
-            private long lastTapTime = 0;
-            private static final long DOUBLE_TAP_TIMEOUT = 300;
-            @Override
-            public void onClick(View v) {
-                long currentTime = System.currentTimeMillis();
-                // Get screen dimensions
-                int screenWidth = Resources.getSystem().getDisplayMetrics().widthPixels;
-                int screenHeight = Resources.getSystem().getDisplayMetrics().heightPixels;
-                // Calculate center of the screen
-                float centerX = screenWidth / 2f;
-                float centerY = screenHeight / 2f;
-                if (currentTime - lastTapTime <= DOUBLE_TAP_TIMEOUT) {
-                    Log.e(TAG, "onClick: Double Tap");
-                    // Create the path to the center of the screen for both taps
-                    Path tap = new Path();
-                    tap.moveTo(centerX, centerY); // First tap at the center
-                    GestureDescription.Builder tapBuilder = new GestureDescription.Builder();
-                    tapBuilder.addStroke(new GestureDescription.StrokeDescription(tap, 0, 100)); // First stroke
-                    // Second tap at the center
-                    tap.moveTo(centerX, centerY);
-                    tapBuilder.addStroke(new GestureDescription.StrokeDescription(tap, 200, 100)); // Second stroke
-                    dispatchGesture(tapBuilder.build(), null, null);
-                } else {
-                    lastTapTime = currentTime;
-                    Log.e(TAG, "onClick: Single Tap detected, waiting for second tap");
-                }
+                DisplayMetrics metrics = new DisplayMetrics();
+                getSystemService(WindowManager.class).getDefaultDisplay().getRealMetrics(metrics);
+
+                int x = metrics.widthPixels / 2;
+                int y = metrics.heightPixels / 2;
+
+                Path path = new Path();
+                path.moveTo(x, y);
+
+                GestureDescription gesture = new GestureDescription.Builder()
+                        .addStroke(new GestureDescription.StrokeDescription(path, 0, 100))
+                        .build();
+
+                dispatchGesture(gesture, null, null);
             }
         });
     }
@@ -208,7 +196,7 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
 
 
     private void configureScrollButton() {
-        Button scrollButton = mLayout.findViewById(R.id.scrollDown);
+        scrollButton = mLayout.findViewById(R.id.scrollDown);
         scrollButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -223,8 +211,8 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
 
 
     private void configureScrollUpButton() {
-        Button scrollButton = mLayout.findViewById(R.id.scrollUp);
-        scrollButton.setOnClickListener(new View.OnClickListener() {
+        scrollUpButton = mLayout.findViewById(R.id.scrollUp);
+        scrollUpButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 AccessibilityNodeInfo scrollable = findScrollableNode(getRootInActiveWindow());
@@ -236,14 +224,11 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
     }
 
 
+    //left
     private void configureSwipeButton() {
-
-        Button swipeButton = mLayout.findViewById(R.id.swipeLeft);
-
-        swipeButton.setOnClickListener(new View.OnClickListener() {
-
+        swipeLeftButton = mLayout.findViewById(R.id.swipeLeft);
+        swipeLeftButton.setOnClickListener(new View.OnClickListener() {
             @Override
-
             public void onClick(View view) {
                 Path swipePath = new Path();
                 swipePath.moveTo(1000, 1000);
@@ -251,41 +236,56 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
                 GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
                 gestureBuilder.addStroke(new GestureDescription.StrokeDescription(swipePath, 0, 500));
                 dispatchGesture(gestureBuilder.build(), null, null);
-
             }
-
         });
-
     }
 
 
 
 
     private void configureSwipeRightButton() {
-
-        swipeButton = mLayout.findViewById(R.id.swipeRight);
-
-        swipeButton.setOnClickListener(new View.OnClickListener() {
-
+        swipeRightButton = mLayout.findViewById(R.id.swipeRight);
+        swipeRightButton.setOnClickListener(new View.OnClickListener() {
             @Override
-
             public void onClick(View view) {
                 Path swipePath = new Path();
-                swipePath.moveTo(100, 1000);
+                swipePath.moveTo(300, 1000);
                 swipePath.lineTo(1000, 1000);
                 GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
                 gestureBuilder.addStroke(new GestureDescription.StrokeDescription(swipePath, 0, 500));
                 dispatchGesture(gestureBuilder.build(), null, null);
             }
-
         });
+    }
 
+    private void configureSimulateDoubleTap() {
+        btnDoubleTap = mLayout.findViewById(R.id.doubleTap);
+        btnDoubleTap.setOnClickListener(v -> {
+            Log.e(TAG, "onClick: Simulate Double Tap");
+
+            DisplayMetrics metrics = new DisplayMetrics();
+            getSystemService(WindowManager.class).getDefaultDisplay().getRealMetrics(metrics);
+
+            int x = metrics.widthPixels / 2;
+            int y = metrics.heightPixels / 2;
+
+            Path path = new Path();
+            path.moveTo(x, y);
+
+            GestureDescription.Builder gestureBuilder = new GestureDescription.Builder();
+
+            // First tap: start at 0ms, last 50ms
+            gestureBuilder.addStroke(new GestureDescription.StrokeDescription(path, 0, 50));
+
+            // Second tap: start at 150ms, last 50ms (gap between taps is 100ms)
+            gestureBuilder.addStroke(new GestureDescription.StrokeDescription(path, 150, 50));
+
+            GestureDescription doubleTapGesture = gestureBuilder.build();
+
+            dispatchGesture(doubleTapGesture, null, null);
+        });
     }
 
 
-    private void triggerSwipeRight() {
-
-
-    }
 
 }

@@ -1,6 +1,14 @@
 package com.example.coverapp;
 
+import static com.example.coverapp.AccessibilityService.btnDoubleTap;
+import static com.example.coverapp.AccessibilityService.btnSimulateTouch;
+import static com.example.coverapp.AccessibilityService.home;
 import static com.example.coverapp.AccessibilityService.power;
+import static com.example.coverapp.AccessibilityService.scrollButton;
+import static com.example.coverapp.AccessibilityService.scrollUpButton;
+import static com.example.coverapp.AccessibilityService.swipeLeftButton;
+import static com.example.coverapp.AccessibilityService.swipeRightButton;
+
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -104,31 +112,31 @@ public class USBCommunication {
                         Log.d("Received Data", receivedData);
                         if (receivedData.equals("SWIPE_RIGHT\r\n")) {
                             Log.d("Trigger:", "SWIPE_RIGHT");
-                            power.callOnClick();
+                            swipeRightButton.callOnClick();
                         }
                         if (receivedData.equals("SWIPE_LEFT\r\n")) {
                             Log.d("Trigger:", "SWIPE_LEFT");
-                            power.callOnClick();
+                            swipeLeftButton.callOnClick();
                         }
                         if (receivedData.equals("SWIPE_UP\r\n")) {
                             Log.d("Trigger:", "SWIPE_UP");
-                            power.callOnClick();
+                            scrollUpButton.callOnClick();
                         }
                         if (receivedData.equals("SWIPE_DOWN\r\n")) {
                             Log.d("Trigger:", "SWIPE_DOWN");
-                            power.callOnClick();
+                            scrollButton.callOnClick();
                         }
                         if (receivedData.equals("BUTTON1\r\n")) {
                             Log.d("Trigger:", "BUTTON1");
-                            power.callOnClick();
+                            btnSimulateTouch.callOnClick();
                         }
                         if (receivedData.equals("BUTTON2\r\n")) {
                             Log.d("Trigger:", "BUTTON2");
-                            power.callOnClick();
+                            btnDoubleTap.callOnClick();
                         }
                         if (receivedData.equals("BUTTON3\r\n")) {
                             Log.d("Trigger:", "BUTTON3");
-                            power.callOnClick();
+                            home.callOnClick();
                         }
 
                     } else {
