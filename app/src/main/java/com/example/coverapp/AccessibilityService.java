@@ -114,7 +114,7 @@ public class AccessibilityService extends android.accessibilityservice.Accessibi
         configureHomeButton();
         configureSimulateDoubleTap();
         Handler handler = new Handler(Looper.getMainLooper());
-        USBCommunication usbCommunication = new USBCommunication(this, handler);
+        USBCommunication.USBRun(this, handler);
     }
 
     private void configureHomeButton() {
