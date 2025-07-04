@@ -20,6 +20,8 @@ import android.hardware.usb.UsbManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.widget.Toast;
+
 import androidx.core.content.ContextCompat;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
@@ -34,7 +36,8 @@ import java.util.concurrent.TimeUnit;
 public class USBCommunication {
     private static final String ACTION_USB_PERMISSION = "com.example.coverapp.USB_PERMISSION";
     private static final long RECONNECTION_DELAY_MS = 3000; // 3 seconds delay for reconnection attempts
-
+    private static final int ARDUINO_VENDOR_ID = 9025;
+    private static final int BAUD_RATE = 2400;
     private static UsbManager usbManager;
     private static UsbSerialPort usbSerialPort;
     private static Context thiscontext;
@@ -94,7 +97,7 @@ public class USBCommunication {
         UsbDevice arduinoDevice = null;
 
         for (UsbDevice device : deviceList.values()) {
-            if (device.getVendorId() == 6790) { // Arduino Vendor ID
+            if (device.getVendorId() == ARDUINO_VENDOR_ID) { // Arduino Vendor ID
                 arduinoDevice = device;
                 break;
             }
@@ -140,14 +143,14 @@ public class USBCommunication {
                 }
             } else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                 UsbDevice attachedDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                if (attachedDevice != null && attachedDevice.getVendorId() == 6790) {
+                if (attachedDevice != null && attachedDevice.getVendorId() == ARDUINO_VENDOR_ID) {
                     Log.d("USB Hotplug", "Arduino device attached: " + attachedDevice.getDeviceName());
                     // Trigger an immediate check, the scheduler will pick it up or this might connect it.
                     findUsbDeviceAndConnect();
                 }
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 UsbDevice detachedDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                if (detachedDevice != null && detachedDevice.getVendorId() == 6790) {
+                if (detachedDevice != null && detachedDevice.getVendorId() == ARDUINO_VENDOR_ID) {
                     Log.w("USB Hotplug", "Arduino device detached: " + detachedDevice.getDeviceName());
                     // Device detached, clean up and let the scheduler attempt reconnection
                     stopListeningInternal(); // Stop the current reading thread and close port
@@ -298,7 +301,7 @@ public class USBCommunication {
             usbSerialPort = ports.get(0);
 
             usbSerialPort.open(connection);
-            usbSerialPort.setParameters(9600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            usbSerialPort.setParameters(BAUD_RATE, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
             listenForData(); // Starts a new, fresh reading thread
             Log.d("USB Status", "USB device opened and configured successfully: " + device.getDeviceName());
         } catch (IOException e) {
