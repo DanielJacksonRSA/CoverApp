@@ -307,6 +307,8 @@ public class USBCommunication {
 
             usbSerialPort.open(connection);
             usbSerialPort.setParameters(BAUD_RATE, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            usbSerialPort.setDTR(true);
+            usbSerialPort.setRTS(true);
             listenForData(); // Starts a new, fresh reading thread
             Log.d("USB Status", "USB device opened and configured successfully: " + device.getDeviceName());
         } catch (IOException e) {
