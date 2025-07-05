@@ -182,28 +182,33 @@ public class USBCommunication {
                         String receivedData = new String(buffer, 0, numBytes).trim();
                         Log.d("Received Data", "Parsed: '" + receivedData + "'");
 
-                        if (receivedData.equals("SWIPE_RIGHT")) {
-                            Log.d("Trigger:", "SWIPE_RIGHT");
-                            if (swipeRightButton != null) swipeRightButton.callOnClick();
-                        } else if (receivedData.equals("SWIPE_LEFT")) {
-                            Log.d("Trigger:", "SWIPE_LEFT");
-                            if (swipeLeftButton != null) swipeLeftButton.callOnClick();
-                        } else if (receivedData.equals("SWIPE_UP")) {
-                            Log.d("Trigger:", "SWIPE_UP");
-                            if (scrollUpButton != null) scrollUpButton.callOnClick();
-                        } else if (receivedData.equals("SWIPE_DOWN")) {
-                            Log.d("Trigger:", "SWIPE_DOWN");
-                            if (scrollButton != null) scrollButton.callOnClick();
-                        } else if (receivedData.equals("BUTTON1")) {
-                            Log.d("Trigger:", "BUTTON1");
-                            if (btnSimulateTouch != null) btnSimulateTouch.callOnClick();
-                        } else if (receivedData.equals("BUTTON2")) {
-                            Log.d("Trigger:", "BUTTON2");
-                            if (btnDoubleTap != null) btnDoubleTap.callOnClick();
-                        } else if (receivedData.equals("BUTTON3")) {
-                            Log.d("Trigger:", "BUTTON3");
-                            if (home != null) home.callOnClick();
+                        for (int i = 0; i < receivedData.length(); i++) {
+                            char c = receivedData.charAt(i);
+
+                            if (c == '7') {
+                                Log.d("Trigger:", "SWIPE_RIGHT");
+                                if (swipeRightButton != null) swipeRightButton.callOnClick();
+                            } else if (c == '6') {
+                                Log.d("Trigger:", "SWIPE_LEFT");
+                                if (swipeLeftButton != null) swipeLeftButton.callOnClick();
+                            } else if (c == '4') {
+                                Log.d("Trigger:", "SWIPE_UP");
+                                if (scrollUpButton != null) scrollUpButton.callOnClick();
+                            } else if (c == '5') {
+                                Log.d("Trigger:", "SWIPE_DOWN");
+                                if (scrollButton != null) scrollButton.callOnClick();
+                            } else if (c == '1') {
+                                Log.d("Trigger:", "BUTTON1");
+                                if (btnSimulateTouch != null) btnSimulateTouch.callOnClick();
+                            } else if (c == '2') {
+                                Log.d("Trigger:", "BUTTON2");
+                                if (btnDoubleTap != null) btnDoubleTap.callOnClick();
+                            } else if (c == '3') {
+                                Log.d("Trigger:", "BUTTON3");
+                                if (home != null) home.callOnClick();
+                            }
                         }
+
                     }
                 } catch (IOException e) {
                     Log.e("USB Error", "Error reading data from USB port: " + e.getMessage(), e);
