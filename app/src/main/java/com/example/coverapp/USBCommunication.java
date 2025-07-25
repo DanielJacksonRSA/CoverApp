@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
 public class USBCommunication {
     private static final String ACTION_USB_PERMISSION = "com.example.coverapp.USB_PERMISSION";
     private static final long RECONNECTION_DELAY_MS = 3000; // 3 seconds delay for reconnection attempts
-    private static final int ARDUINO_VENDOR_ID = 9025;
+    private static final int ARDUINO_VENDOR_ID = 5824; //9025
     private static final int BAUD_RATE = 2400;
     private static UsbManager usbManager;
     private static UsbSerialPort usbSerialPort;
