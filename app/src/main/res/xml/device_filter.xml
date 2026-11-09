@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  USB devices that should prompt Android to offer opening SerialTouch when attached.
+
+  NOTE: this vendor-id (6790 = 0x1A86, CH340-class adapters) must match the controller you use.
+  The runtime connection logic in USBCommunication filters on CONTROLLER_VENDOR_ID (currently 5824
+  = 0x16C0). If your board enumerates under a different vendor id, update BOTH values so the
+  attach prompt and the connection logic agree.
+-->
 <resources>
     <usb-device vendor-id="6790" />
 </resources>

@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Hidden overlay hosting one button per supported action. The buttons are never shown
+  (visibility="gone"); they exist only as programmatic click targets that AccessibilityService
+  wires up and USBCommunication triggers in response to serial input.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
@@ -22,49 +27,49 @@
         android:id="@+id/scrollUp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/scrollUp"
+        android:text="@string/scroll_up"
         android:visibility="gone" />
 
     <Button
         android:id="@+id/scrollDown"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/scrollDown"
+        android:text="@string/scroll_down"
         android:visibility="gone" />
 
     <Button
         android:id="@+id/swipeLeft"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/swipeLeft"
+        android:text="@string/swipe_left"
         android:visibility="gone" />
 
     <Button
         android:id="@+id/swipeRight"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/swipeRight"
+        android:text="@string/swipe_right"
         android:visibility="gone" />
 
     <Button
         android:id="@+id/simulateTouch"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/simulateTouch"
+        android:text="@string/simulate_touch"
         android:visibility="gone" />
 
     <Button
         android:id="@+id/btnHome"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Home"
+        android:text="@string/home"
         android:visibility="gone" />
 
     <Button
         android:id="@+id/doubleTap"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="2 Tap"
+        android:text="@string/double_tap"
         android:visibility="gone" />
 
 </LinearLayout>

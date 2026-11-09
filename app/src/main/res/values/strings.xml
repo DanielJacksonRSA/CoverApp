@@ -1,15 +1,18 @@
 <resources>
-    <string name="app_name">CoverApp</string>
+    <string name="app_name">SerialTouch</string>
+    <string name="accessibility_service_label">SerialTouch Controller</string>
+    <string name="accessibility_service_description">Lets a USB serial controller drive on-screen gestures (tap, swipe, scroll, home).</string>
+
+    <string name="open_accessibility_settings">Enable SerialTouch</string>
+
+    <!-- Overlay button labels (the overlay is hidden; labels aid debugging/accessibility). -->
     <string name="power">Power</string>
     <string name="volume">Volume</string>
-    <string name="scroll">Scroll</string>
-    <string name="swipe">Swipe</string>
-    <string name="simulateTouch">Touch</string>
-    <string name="accessibility_service_description">Accessibility</string>
-    <string name="accessibility_service_label">Accessibility</string>
-    <string name="simulateDoubleTouch">2 Tap</string>
-    <string name="scrollUp">Scroll U</string>
-    <string name="scrollDown">Scroll D</string>
-    <string name="swipeLeft">Swipe L</string>
-    <string name="swipeRight">Swipe R</string>
+    <string name="home">Home</string>
+    <string name="scroll_up">Scroll Up</string>
+    <string name="scroll_down">Scroll Down</string>
+    <string name="swipe_left">Swipe Left</string>
+    <string name="swipe_right">Swipe Right</string>
+    <string name="simulate_touch">Tap</string>
+    <string name="double_tap">Double Tap</string>
 </resources>

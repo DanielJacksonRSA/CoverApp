@@ -21,6 +21,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CoverApp"
+rootProject.name = "SerialTouch"
 include(":app")
  

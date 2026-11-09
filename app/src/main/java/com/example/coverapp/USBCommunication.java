@@ -1,14 +1,5 @@
 package com.example.coverapp;
 
-import static com.example.coverapp.AccessibilityService.btnDoubleTap;
-import static com.example.coverapp.AccessibilityService.btnSimulateTouch;
-import static com.example.coverapp.AccessibilityService.home;
-import static com.example.coverapp.AccessibilityService.power;
-import static com.example.coverapp.AccessibilityService.scrollButton;
-import static com.example.coverapp.AccessibilityService.scrollUpButton;
-import static com.example.coverapp.AccessibilityService.swipeLeftButton;
-import static com.example.coverapp.AccessibilityService.swipeRightButton;
-
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -20,12 +11,14 @@ import android.hardware.usb.UsbManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.widget.Toast;
+import android.widget.Button;
 
 import androidx.core.content.ContextCompat;
+
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
+
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -33,314 +26,346 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class USBCommunication {
+/**
+ * Manages the USB-serial link to the physical controller and translates incoming bytes into
+ * on-screen actions.
+ *
+ * <p>The controller (an Arduino-class board) sends single ASCII digits over serial. Each digit is
+ * mapped to one of the overlay buttons owned by {@link AccessibilityService}; triggering that
+ * button runs the corresponding gesture or global action.
+ *
+ * <p>Connection handling is resilient: a background scheduler repeatedly attempts to find and open
+ * the device, and hotplug (attach/detach) broadcasts drive reconnection.
+ *
+ * <h2>Serial protocol</h2>
+ *
+ * <pre>
+ *   '1' -> tap (center)      '5' -> scroll down
+ *   '2' -> double tap        '6' -> swipe left
+ *   '3' -> home              '7' -> swipe right
+ *   '4' -> scroll up
+ * </pre>
+ */
+public final class USBCommunication {
+
+    private static final String TAG = "SerialTouchUsb";
+
     private static final String ACTION_USB_PERMISSION = "com.example.coverapp.USB_PERMISSION";
-    private static final long RECONNECTION_DELAY_MS = 3000; // 3 seconds delay for reconnection attempts
-    private static final int ARDUINO_VENDOR_ID = 5824; //9025
+
+    /** Delay between reconnection attempts. */
+    private static final long RECONNECTION_DELAY_MS = 3000;
+    /** Vendor ID of the controller board. */
+    private static final int CONTROLLER_VENDOR_ID = 5824;
     private static final int BAUD_RATE = 2400;
+    private static final int DATA_BITS = 8;
+    private static final int READ_TIMEOUT_MS = 1000;
+    private static final int READ_BUFFER_SIZE = 64;
+    /** Delay before opening a device once permission is granted, to let the system settle. */
+    private static final long OPEN_AFTER_PERMISSION_DELAY_MS = 500;
+
     private static UsbManager usbManager;
     private static UsbSerialPort usbSerialPort;
-    private static Context thiscontext;
-    private static Handler uiHandler; // Handler for UI operations, if needed
+    private static Context appContext;
 
     private static Thread readingThread;
-    private static ScheduledExecutorService scheduler; // For periodic checks
-
-    // Flag to control the automatic reconnection logic
+    private static ScheduledExecutorService scheduler;
     private static volatile boolean autoReconnectEnabled = false;
 
-    public static void USBRun(Context context, Handler handler) {
-        thiscontext = context;
+    private USBCommunication() {
+        // Utility class; not instantiable.
+    }
+
+    /** Starts USB discovery and the auto-reconnect loop. */
+    public static void start(Context context, Handler handler) {
+        appContext = context.getApplicationContext();
         usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
-        uiHandler = handler; // Assuming this is a Handler for the UI thread
 
         IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+        filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         ContextCompat.registerReceiver(context, usbReceiver, filter, ContextCompat.RECEIVER_EXPORTED);
 
-        // Start the initial device search and enable auto-reconnect
         startAutoReconnect();
+    }
+
+    /** Stops listening, cancels reconnection, and unregisters the broadcast receiver. */
+    public static void stop() {
+        stopAutoReconnect();
+        if (appContext != null) {
+            try {
+                appContext.unregisterReceiver(usbReceiver);
+            } catch (IllegalArgumentException e) {
+                Log.d(TAG, "Receiver already unregistered");
+            }
+        }
     }
 
     private static void startAutoReconnect() {
         if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdownNow(); // Stop any existing scheduler
+            scheduler.shutdownNow();
         }
         scheduler = Executors.newSingleThreadScheduledExecutor();
         autoReconnectEnabled = true;
 
-        // Schedule a task to continuously check for and connect to the USB device
-        scheduler.scheduleWithFixedDelay(() -> {
-            if (autoReconnectEnabled && (usbSerialPort == null || !usbSerialPort.isOpen())) {
-                Log.d("USBCommunication", "Scheduled check: Attempting to find and connect to USB device.");
-                findUsbDeviceAndConnect();
-            }
-        }, 0, RECONNECTION_DELAY_MS, TimeUnit.MILLISECONDS); // Initial delay 0, then fixed 3s delay
+        scheduler.scheduleWithFixedDelay(
+                () -> {
+                    if (autoReconnectEnabled && (usbSerialPort == null || !usbSerialPort.isOpen())) {
+                        Log.d(TAG, "Scheduled check: looking for controller");
+                        findDeviceAndConnect();
+                    }
+                },
+                0,
+                RECONNECTION_DELAY_MS,
+                TimeUnit.MILLISECONDS);
     }
 
-    public static void stopAutoReconnect() {
+    private static void stopAutoReconnect() {
         autoReconnectEnabled = false;
         if (scheduler != null) {
             scheduler.shutdown();
-            Log.d("USBCommunication", "Auto-reconnect scheduler shut down.");
+            scheduler = null;
         }
-        stopListeningInternal(); // Ensure any active listening is also stopped
+        stopListening();
     }
 
-
-    private static void findUsbDeviceAndConnect() {
-        if (usbManager == null || thiscontext == null) {
-            Log.e("USBCommunication", "USBManager or Context is null, cannot find device.");
+    private static void findDeviceAndConnect() {
+        if (usbManager == null || appContext == null) {
+            Log.w(TAG, "UsbManager or context unavailable; cannot search for device");
             return;
         }
 
-        HashMap<String, UsbDevice> deviceList = usbManager.getDeviceList();
-        UsbDevice arduinoDevice = null;
-
-        for (UsbDevice device : deviceList.values()) {
-            if (device.getVendorId() == ARDUINO_VENDOR_ID) { // Arduino Vendor ID
-                arduinoDevice = device;
-                break;
-            }
+        UsbDevice controller = findController();
+        if (controller == null) {
+            Log.d(TAG, "No matching controller found");
+            return;
         }
 
-        if (arduinoDevice != null) {
-            if (usbManager.hasPermission(arduinoDevice)) {
-                Log.d("USB Permission", "Already granted for device: " + arduinoDevice.getDeviceName());
-                openUsbDevice(arduinoDevice);
-            } else {
-                Log.d("USB Permission", "Requesting permission for device: " + arduinoDevice.getDeviceName());
-                PendingIntent permissionIntent = PendingIntent.getBroadcast(
-                        thiscontext,
-                        0,
-                        new Intent(ACTION_USB_PERMISSION),
-                        PendingIntent.FLAG_IMMUTABLE
-                );
-                usbManager.requestPermission(arduinoDevice, permissionIntent);
-                // Permission request is asynchronous, the receiver will handle connection if granted.
-            }
+        if (usbManager.hasPermission(controller)) {
+            openDevice(controller);
         } else {
-            Log.d("Find USB Device", "No suitable Arduino device found.");
+            Log.d(TAG, "Requesting USB permission for " + controller.getDeviceName());
+            PendingIntent permissionIntent =
+                    PendingIntent.getBroadcast(
+                            appContext,
+                            0,
+                            new Intent(ACTION_USB_PERMISSION),
+                            PendingIntent.FLAG_IMMUTABLE);
+            usbManager.requestPermission(controller, permissionIntent);
         }
     }
 
-
-    private static final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (ACTION_USB_PERMISSION.equals(action)) {
-                UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                if (device != null) {
-                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        Log.d("USB Permission", "Permission granted for device: " + device.getDeviceName() + ". Attempting to open.");
-                        // It's crucial to delay slightly to allow the system to fully set up the device after permission
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> openUsbDevice(device), 500);
-                    } else {
-                        Log.w("USB Permission", "Permission denied for device: " + device.getDeviceName());
-                    }
-                } else {
-                    Log.w("USB Permission", "USB_PERMISSION broadcast received with null device.");
-                }
-            } else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
-                UsbDevice attachedDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                if (attachedDevice != null && attachedDevice.getVendorId() == ARDUINO_VENDOR_ID) {
-                    Log.d("USB Hotplug", "Arduino device attached: " + attachedDevice.getDeviceName());
-                    // Trigger an immediate check, the scheduler will pick it up or this might connect it.
-                    findUsbDeviceAndConnect();
-                }
-            } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
-                UsbDevice detachedDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                if (detachedDevice != null && detachedDevice.getVendorId() == ARDUINO_VENDOR_ID) {
-                    Log.w("USB Hotplug", "Arduino device detached: " + detachedDevice.getDeviceName());
-                    // Device detached, clean up and let the scheduler attempt reconnection
-                    stopListeningInternal(); // Stop the current reading thread and close port
-                    // The scheduler will automatically attempt to find and reconnect.
-                }
+    private static UsbDevice findController() {
+        HashMap<String, UsbDevice> deviceList = usbManager.getDeviceList();
+        for (UsbDevice device : deviceList.values()) {
+            if (device.getVendorId() == CONTROLLER_VENDOR_ID) {
+                return device;
             }
         }
-    };
+        return null;
+    }
 
-    private static void listenForData() {
-        // Stop any existing reading thread cleanly before starting a new one
-        if (readingThread != null) {
-            stopListeningInternal();
+    private static final BroadcastReceiver usbReceiver =
+            new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    String action = intent.getAction();
+                    if (action == null) {
+                        return;
+                    }
+                    UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+
+                    switch (action) {
+                        case ACTION_USB_PERMISSION:
+                            handlePermissionResult(intent, device);
+                            break;
+                        case UsbManager.ACTION_USB_DEVICE_ATTACHED:
+                            if (isController(device)) {
+                                Log.d(TAG, "Controller attached");
+                                findDeviceAndConnect();
+                            }
+                            break;
+                        case UsbManager.ACTION_USB_DEVICE_DETACHED:
+                            if (isController(device)) {
+                                Log.w(TAG, "Controller detached");
+                                stopListening();
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            };
+
+    private static void handlePermissionResult(Intent intent, UsbDevice device) {
+        if (device == null) {
+            Log.w(TAG, "USB permission broadcast with null device");
+            return;
+        }
+        if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+            Log.d(TAG, "USB permission granted; opening device");
+            new Handler(Looper.getMainLooper())
+                    .postDelayed(() -> openDevice(device), OPEN_AFTER_PERMISSION_DELAY_MS);
+        } else {
+            Log.w(TAG, "USB permission denied for " + device.getDeviceName());
+        }
+    }
+
+    private static boolean isController(UsbDevice device) {
+        return device != null && device.getVendorId() == CONTROLLER_VENDOR_ID;
+    }
+
+    private static void openDevice(UsbDevice device) {
+        if (usbSerialPort != null
+                && usbSerialPort.isOpen()
+                && usbSerialPort.getDriver().getDevice().equals(device)) {
+            Log.d(TAG, "Port already open for this device");
+            return;
         }
 
-        readingThread = new Thread(() -> {
-            byte[] buffer = new byte[64];
-            Log.d("Listening Status: ", "started");
+        stopListening();
 
-            if (usbSerialPort == null || !usbSerialPort.isOpen()) {
-                Log.e("USBCommunication", "usbSerialPort is not open or null, cannot start listening. Terminating reading thread.");
+        UsbDeviceConnection connection = null;
+        try {
+            connection = usbManager.openDevice(device);
+            if (connection == null) {
+                Log.e(TAG, "Failed to open connection (device busy or permission revoked)");
                 return;
             }
 
-            while (!Thread.interrupted()) {
-                try {
-                    int numBytes = usbSerialPort.read(buffer, 1000);
-                    if (numBytes > 0) {
-                        String receivedData = new String(buffer, 0, numBytes).trim();
-                        Log.d("Received Data", "Parsed: '" + receivedData + "'");
-
-                        for (int i = 0; i < receivedData.length(); i++) {
-                            char c = receivedData.charAt(i);
-
-                            if (c == '7') {
-                                Log.d("Trigger:", "SWIPE_RIGHT");
-                                if (swipeRightButton != null) swipeRightButton.callOnClick();
-                            } else if (c == '6') {
-                                Log.d("Trigger:", "SWIPE_LEFT");
-                                if (swipeLeftButton != null) swipeLeftButton.callOnClick();
-                            } else if (c == '4') {
-                                Log.d("Trigger:", "SWIPE_UP");
-                                if (scrollUpButton != null) scrollUpButton.callOnClick();
-                            } else if (c == '5') {
-                                Log.d("Trigger:", "SWIPE_DOWN");
-                                if (scrollButton != null) scrollButton.callOnClick();
-                            } else if (c == '1') {
-                                Log.d("Trigger:", "BUTTON1");
-                                if (btnSimulateTouch != null) btnSimulateTouch.callOnClick();
-                            } else if (c == '2') {
-                                Log.d("Trigger:", "BUTTON2");
-                                if (btnDoubleTap != null) btnDoubleTap.callOnClick();
-                            } else if (c == '3') {
-                                Log.d("Trigger:", "BUTTON3");
-                                if (home != null) home.callOnClick();
-                            }
-                        }
-
-                    }
-                } catch (IOException e) {
-                    Log.e("USB Error", "Error reading data from USB port: " + e.getMessage(), e);
-                    // Disconnection detected. Clean up and let the scheduler handle reconnection.
-                    stopListeningInternal();
-                    break; // Exit the reading loop immediately
-                } catch (NullPointerException npe) {
-                    Log.e("USB Error", "NullPointerException in reading thread (usbSerialPort might be null): " + npe.getMessage(), npe);
-                    stopListeningInternal();
-                    break;
-                } catch (Exception e) {
-                    Log.e("USBCommunication", "Unexpected error in listening thread: " + e.getMessage(), e);
-                    stopListeningInternal();
-                    break;
-                }
+            UsbSerialDriver driver = UsbSerialProber.getDefaultProber().probeDevice(device);
+            if (driver == null) {
+                Log.e(TAG, "No serial driver for device " + device.getDeviceName());
+                connection.close();
+                return;
             }
-            Log.d("Listening Status", "Listening thread ended");
-        });
+
+            List<UsbSerialPort> ports = driver.getPorts();
+            if (ports.isEmpty()) {
+                Log.e(TAG, "No serial ports on device " + device.getDeviceName());
+                connection.close();
+                return;
+            }
+
+            usbSerialPort = ports.get(0);
+            usbSerialPort.open(connection);
+            usbSerialPort.setParameters(
+                    BAUD_RATE, DATA_BITS, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            usbSerialPort.setDTR(true);
+            usbSerialPort.setRTS(true);
+
+            startListening();
+            Log.d(TAG, "Controller connected: " + device.getDeviceName());
+        } catch (IOException | SecurityException e) {
+            Log.e(TAG, "Error opening device " + device.getDeviceName(), e);
+            closeQuietly(connection);
+            usbSerialPort = null;
+        }
+    }
+
+    private static void startListening() {
+        stopReadingThread();
+
+        readingThread =
+                new Thread(
+                        () -> {
+                            byte[] buffer = new byte[READ_BUFFER_SIZE];
+                            Log.d(TAG, "Listening started");
+
+                            if (usbSerialPort == null || !usbSerialPort.isOpen()) {
+                                Log.e(TAG, "Port not open; listening thread terminating");
+                                return;
+                            }
+
+                            while (!Thread.interrupted()) {
+                                try {
+                                    int numBytes = usbSerialPort.read(buffer, READ_TIMEOUT_MS);
+                                    if (numBytes > 0) {
+                                        String data = new String(buffer, 0, numBytes).trim();
+                                        for (int i = 0; i < data.length(); i++) {
+                                            dispatchTrigger(data.charAt(i));
+                                        }
+                                    }
+                                } catch (IOException e) {
+                                    Log.e(TAG, "Read error; stopping listener", e);
+                                    stopListening();
+                                    break;
+                                } catch (Exception e) {
+                                    Log.e(TAG, "Unexpected error in listener", e);
+                                    stopListening();
+                                    break;
+                                }
+                            }
+                            Log.d(TAG, "Listening stopped");
+                        });
         readingThread.start();
     }
 
-    public void stopListening() {
-        stopListeningInternal();
-        stopAutoReconnect(); // Also stop the background reconnection attempts
+    /** Maps a trigger character from the controller to the matching overlay button. */
+    private static void dispatchTrigger(char trigger) {
+        Button target;
+        switch (trigger) {
+            case '1':
+                target = AccessibilityService.simulateTouchButton;
+                break;
+            case '2':
+                target = AccessibilityService.doubleTapButton;
+                break;
+            case '3':
+                target = AccessibilityService.homeButton;
+                break;
+            case '4':
+                target = AccessibilityService.scrollUpButton;
+                break;
+            case '5':
+                target = AccessibilityService.scrollDownButton;
+                break;
+            case '6':
+                target = AccessibilityService.swipeLeftButton;
+                break;
+            case '7':
+                target = AccessibilityService.swipeRightButton;
+                break;
+            default:
+                return;
+        }
+        if (target != null) {
+            Log.d(TAG, "Trigger '" + trigger + "'");
+            target.post(target::callOnClick);
+        }
     }
 
-    private static void stopListeningInternal() {
-        if (readingThread != null) {
-            readingThread.interrupt();
-            try {
-                readingThread.join(1000);
-            } catch (InterruptedException e) {
-                Log.e("USBCommunication", "Interrupted while waiting for reading thread to join: " + e.getMessage());
-                Thread.currentThread().interrupt();
-            }
-            readingThread = null;
-        }
+    private static void stopListening() {
+        stopReadingThread();
         if (usbSerialPort != null) {
             try {
                 usbSerialPort.close();
-                Log.d("USBCommunication", "USB serial port closed.");
             } catch (IOException e) {
-                Log.e("USBCommunication", "Error closing USB serial port: " + e.getMessage());
+                Log.e(TAG, "Error closing port", e);
             } finally {
                 usbSerialPort = null;
             }
         }
     }
 
-
-    public static void unregisterReceiver() {
-        if (thiscontext != null) {
+    private static void stopReadingThread() {
+        if (readingThread != null) {
+            readingThread.interrupt();
             try {
-                thiscontext.unregisterReceiver(usbReceiver);
-                Log.d("USBCommunication", "USB BroadcastReceiver unregistered.");
-            } catch (IllegalArgumentException e) {
-                Log.e("USBCommunication", "Receiver not registered or already unregistered: " + e.getMessage());
+                readingThread.join(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
+            readingThread = null;
         }
-        stopAutoReconnect(); // Ensure scheduler is stopped when receiver is unregistered
-        stopListeningInternal(); // Final cleanup
     }
 
-    private static void openUsbDevice(UsbDevice device) {
-        // If a port is already open and valid for this device, don't reopen.
-        if (usbSerialPort != null && usbSerialPort.isOpen() && usbSerialPort.getDriver().getDevice().equals(device)) {
-            Log.d("USBCommunication", "USB port already open and valid for device: " + device.getDeviceName());
-            return;
-        }
-
-        // Clean up any existing state before attempting to open a new connection
-        stopListeningInternal(); // This closes usbSerialPort and sets it to null
-
-        UsbDeviceConnection connection = null;
-        try {
-            connection = usbManager.openDevice(device);
-            if (connection == null) {
-                Log.e("USB Error", "Failed to open USB connection for device: " + device.getDeviceName() + ". Device might be busy or permission revoked.");
-                return;
+    private static void closeQuietly(UsbDeviceConnection connection) {
+        if (connection != null) {
+            try {
+                connection.close();
+            } catch (Exception e) {
+                Log.e(TAG, "Error closing connection", e);
             }
-
-            UsbSerialDriver driver = UsbSerialProber.getDefaultProber().probeDevice(device);
-            if (driver == null) {
-                Log.e("USB Error", "No suitable USB serial driver found for device: " + device.getDeviceName() + ". Vendor ID: " + device.getVendorId() + ", Product ID: " + device.getProductId());
-                if (connection != null) connection.close();
-                return;
-            }
-
-            List<UsbSerialPort> ports = driver.getPorts();
-            if (ports.isEmpty()) {
-                Log.e("USB Error", "No serial ports found on device: " + device.getDeviceName());
-                if (connection != null) connection.close();
-                return;
-            }
-            usbSerialPort = ports.get(0);
-
-            usbSerialPort.open(connection);
-            usbSerialPort.setParameters(BAUD_RATE, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
-            usbSerialPort.setDTR(true);
-            usbSerialPort.setRTS(true);
-            listenForData(); // Starts a new, fresh reading thread
-            Log.d("USB Status", "USB device opened and configured successfully: " + device.getDeviceName());
-        } catch (IOException e) {
-            Log.e("USB Error", "IOException during USB device setup for " + device.getDeviceName() + ": " + e.getMessage(), e);
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (Exception closeEx) {
-                    Log.e("USB Error", "Error closing connection after setup failure: " + closeEx.getMessage());
-                }
-            }
-            usbSerialPort = null;
-        } catch (SecurityException e) {
-            Log.e("USB Error", "SecurityException (permission denied) when opening USB device " + device.getDeviceName() + ": " + e.getMessage(), e);
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (Exception closeEx) {
-                    Log.e("USB Error", "Error closing connection after security exception: " + closeEx.getMessage());
-                }
-            }
-            usbSerialPort = null;
-        } catch (Exception e) {
-            Log.e("USB Error", "Unexpected error during USB device opening for " + device.getDeviceName() + ": " + e.getMessage(), e);
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (Exception closeEx) {
-                    Log.e("USB Error", "Error closing connection after unexpected exception: " + closeEx.getMessage());
-                }
-            }
-            usbSerialPort = null;
         }
     }
 }
