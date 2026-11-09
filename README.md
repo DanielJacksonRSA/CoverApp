@@ -1,82 +1,45 @@
-<div align="center">
+# SerialTouch
 
-# ⚡ SerialTouch
-
-### Drive your Android phone with real, physical buttons.
-
-*Plug in a microcontroller. Press a button. Watch your phone tap, swipe, and scroll — no fingers required.*
-
-<br/>
-
-![Platform](https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white)
-![Min SDK](https://img.shields.io/badge/minSdk-31-blue)
-![Target SDK](https://img.shields.io/badge/targetSdk-35-blue)
-![Language](https://img.shields.io/badge/language-Java-orange?logo=openjdk&logoColor=white)
-![Interface](https://img.shields.io/badge/interface-USB%20Serial-black?logo=usb&logoColor=white)
-![License](https://img.shields.io/badge/license-All_Rights_Reserved-red)
-
-</div>
-
----
-
-## 🎯 What is this?
-
-**SerialTouch** turns any USB-serial microcontroller (Arduino, Teensy, or a CH340-based board) into a
-**physical remote control for your Android device**.
-
-The board sends a single character over the serial port; SerialTouch catches it and performs the
-matching on-screen gesture through Android's **AccessibilityService** — a center tap, a double tap,
-a directional swipe, a scroll, or a jump to the home screen.
-
-> Think of it as a programmable "macro pad" for your phone. Great for accessibility rigs,
-> kiosk setups, hands-free control, test automation jigs, or any build where a human finger
-> isn't practical.
+**A physical button for your phone.** Wire up a microcontroller, press a key, and your Android device taps, swipes, scrolls, or jumps home. No finger on the glass.
 
 ```
-┌──────────────┐   USB serial    ┌─────────────────────┐   gesture    ┌───────────────┐
-│  Controller  │ ──────────────► │     SerialTouch     │ ───────────► │  Your Android │
-│  (Arduino)   │   '1'..'7'      │ AccessibilityService│  tap/swipe   │    screen     │
-└──────────────┘                 └─────────────────────┘              └───────────────┘
+  controller  ──USB serial──►  SerialTouch  ──gesture──►  your screen
+  (Arduino)      '1'..'7'       (a11y service)   tap/swipe
 ```
 
----
+SerialTouch listens to a USB-serial board over an OTG cable. The board sends one character; the app turns it into an on-screen gesture through Android's AccessibilityService. That's the whole idea.
 
-## ✨ Features
+Good for accessibility rigs, kiosks, hands-free setups, test jigs, or anything where a human finger isn't practical.
 
-- 🔌 **Plug-and-play USB** — auto-detects the controller and connects on attach.
-- ♻️ **Self-healing connection** — a background watchdog reconnects every few seconds if the cable
-  is pulled or the board resets.
-- 👆 **Seven mapped actions** out of the box — tap, double-tap, home, scroll up/down, swipe left/right.
-- 🪟 **Invisible overlay** — actions are dispatched through a hidden accessibility overlay; nothing
-  clutters your screen.
-- 🧩 **Trivially extensible** — add a new gesture by adding one button and one `case`.
+## Why it exists
 
----
+Android has no clean way to let hardware drive the touchscreen. SerialTouch closes that gap with the smallest possible protocol (a single byte per action) and a connection that heals itself when the cable is yanked or the board resets.
 
-## 🎮 Serial protocol
+## What it does
 
-The controller speaks a dead-simple protocol: **one ASCII digit per action**, streamed over serial.
+* Auto-detects the controller and connects the moment it's plugged in.
+* Reconnects on its own. A background watchdog retries every few seconds after a drop.
+* Ships with seven actions: tap, double-tap, home, scroll up, scroll down, swipe left, swipe right.
+* Stays out of the way. Gestures run through a hidden overlay, so nothing shows on screen.
+* Extends in two edits. One button, one switch case, and you have a new action.
 
-| Byte | Action        | What happens on screen                     |
-|:----:|---------------|--------------------------------------------|
-| `1`  | Tap           | Single tap at the center of the display    |
-| `2`  | Double tap    | Two quick taps at the center               |
-| `3`  | Home          | Go to the home screen                      |
-| `4`  | Scroll up     | Scroll the focused list backward           |
-| `5`  | Scroll down   | Scroll the focused list forward            |
-| `6`  | Swipe left    | Horizontal swipe, right → left             |
-| `7`  | Swipe right   | Horizontal swipe, left → right             |
+## The protocol
 
-**Serial line settings**
+One ASCII digit per action, streamed over serial.
 
-| Setting   | Value |
-|-----------|-------|
-| Baud rate | `2400` |
-| Data bits | `8` |
-| Stop bits | `1` |
-| Parity    | `None` |
+| Byte | Action      | On screen                                |
+|:----:|-------------|------------------------------------------|
+| `1`  | Tap         | Single tap at the center of the display  |
+| `2`  | Double tap  | Two quick taps at the center             |
+| `3`  | Home        | Go to the home screen                    |
+| `4`  | Scroll up   | Scroll the focused list backward         |
+| `5`  | Scroll down | Scroll the focused list forward          |
+| `6`  | Swipe left  | Horizontal swipe, right to left          |
+| `7`  | Swipe right | Horizontal swipe, left to right          |
 
-### Example firmware (Arduino)
+Line settings: **2400** baud, **8** data bits, **1** stop bit, **no** parity.
+
+A minimal Arduino sketch:
 
 ```cpp
 void setup() {
@@ -87,97 +50,68 @@ void loop() {
   if (digitalRead(2) == LOW) { Serial.print('1'); delay(200); } // tap
   if (digitalRead(3) == LOW) { Serial.print('3'); delay(200); } // home
   if (digitalRead(4) == LOW) { Serial.print('7'); delay(200); } // swipe right
-  // ...wire up the rest the same way
+  // wire up the rest the same way
 }
 ```
 
----
+## Getting started
 
-## 🚀 Getting started
+You'll need Android Studio (AGP 8.8, JDK 11+), a device on Android 12 (API 31) or newer with USB host support, a USB-serial board, and an OTG cable.
 
-### Prerequisites
-
-- Android Studio (AGP **8.8**, JDK **11+**)
-- An Android device running **Android 12 (API 31)** or newer with **USB host** support
-- A USB-serial controller + an OTG cable
-
-### Build & install
+Build and install onto a connected device:
 
 ```bash
 git clone <your-repo-url>
 cd SerialTouch
-./gradlew installDebug      # build and push to a connected device
+./gradlew installDebug
 ```
 
-> **Heads up:** `local.properties` is intentionally **not** committed. Android Studio generates it
-> automatically, or create it yourself with `sdk.dir=/path/to/Android/sdk`.
+`local.properties` is not committed. Android Studio generates it, or you can write one yourself with `sdk.dir=/path/to/Android/sdk`.
 
-### Enable the service
+Then turn it on:
 
-1. Launch **SerialTouch** and tap **Enable SerialTouch**.
-2. In **Settings → Accessibility → SerialTouch Controller**, toggle the service **on**.
-3. Plug in your controller via OTG and approve the USB permission prompt.
-4. Press a button on your controller — the phone responds instantly. 🎉
+1. Open SerialTouch and tap **Enable SerialTouch**.
+2. Under Settings > Accessibility > SerialTouch Controller, flip the service on.
+3. Plug the controller in over OTG and approve the USB prompt.
+4. Press a button. The phone responds.
 
----
-
-## 🏗️ Architecture
+## How it fits together
 
 ```
 app/src/main/java/com/example/coverapp/
-├── MainActivity.java         → Entry screen; shortcut to Accessibility settings
-├── AccessibilityService.java → Builds the hidden overlay, performs gestures/global actions
-└── USBCommunication.java     → USB discovery, connection watchdog, serial → action mapping
+  MainActivity.java          entry screen, shortcut to Accessibility settings
+  AccessibilityService.java  hidden overlay, gestures, global actions
+  USBCommunication.java      USB discovery, reconnect watchdog, byte -> action
 ```
 
-**How a button press becomes a gesture**
+A byte becomes a gesture in three hops:
 
-1. `AccessibilityService` connects, inflates a hidden overlay (`floating_bar.xml`) with one
-   `Button` per action, and wires each button to a gesture or global action.
-2. It then hands control to `USBCommunication.start(...)`, which locates the controller, opens the
-   serial port, and spins up a reader thread.
-3. Each incoming digit is mapped to the matching overlay button and that button's click handler is
-   invoked **on the UI thread**, triggering the gesture.
+1. The accessibility service connects, inflates a hidden overlay (`floating_bar.xml`) with one button per action, and wires each button to a gesture or global action.
+2. It hands off to `USBCommunication.start(...)`, which finds the controller, opens the port, and starts a reader thread.
+3. Each incoming digit maps to a button, whose click runs on the UI thread and fires the gesture.
 
-The overlay buttons act as a clean seam between "input source" and "action": the USB layer never
-touches gesture APIs directly — it just clicks buttons.
+The overlay buttons are the seam between input and action. The USB layer never touches gesture APIs. It just clicks buttons.
 
----
+## Tuning
 
-## 🔧 Configuration & tuning
+Every knob is a constant at the top of its class.
 
-All tunables live as constants at the top of their class:
+| Constant                | File                    | Purpose                            |
+|-------------------------|-------------------------|------------------------------------|
+| `CONTROLLER_VENDOR_ID`  | `USBCommunication.java` | USB vendor ID the app connects to  |
+| `BAUD_RATE`             | `USBCommunication.java` | Serial baud rate (match firmware)  |
+| `RECONNECTION_DELAY_MS` | `USBCommunication.java` | Reconnect retry interval           |
+| `SWIPE_DURATION_MS`     | `AccessibilityService`  | Length of a swipe                  |
+| `TAP_DURATION_MS`       | `AccessibilityService`  | Length of a tap                    |
 
-| Constant                 | File                    | Purpose                                   |
-|--------------------------|-------------------------|-------------------------------------------|
-| `CONTROLLER_VENDOR_ID`   | `USBCommunication.java` | USB vendor ID the app connects to         |
-| `BAUD_RATE`              | `USBCommunication.java` | Serial baud rate (match your firmware)    |
-| `RECONNECTION_DELAY_MS`  | `USBCommunication.java` | Reconnect watchdog interval               |
-| `SWIPE_DURATION_MS`      | `AccessibilityService`  | Length of swipe gestures                  |
-| `TAP_DURATION_MS`        | `AccessibilityService`  | Length of a single tap                    |
+One gotcha worth knowing: `res/xml/device_filter.xml` (the "open app on attach" prompt) and `CONTROLLER_VENDOR_ID` (the runtime connection) are set independently and currently hold different values. If attach detection or auto-connect acts up, set both to your board's real vendor ID.
 
-> ⚠️ **Vendor ID consistency:** `res/xml/device_filter.xml` (which controls the "open app on attach"
-> prompt) and `CONTROLLER_VENDOR_ID` (which controls the runtime connection) are configured
-> independently and currently hold **different** values. If attach-detection or auto-connect misbehaves,
-> make both match your board's actual vendor ID.
+To add an action: drop a hidden button into `floating_bar.xml`, bind it in `AccessibilityService.bindButtons()` as a `static Button`, and add a `case` in `USBCommunication.dispatchTrigger(...)`.
 
-### Add a new action
+## Permissions and privacy
 
-1. Add a hidden `Button` to `res/layout/floating_bar.xml`.
-2. Bind it in `AccessibilityService.bindButtons()` and expose it as a `static Button`.
-3. Add a `case` for its trigger character in `USBCommunication.dispatchTrigger(...)`.
+SerialTouch runs as an AccessibilityService, which is a powerful permission. It uses that power for two things only: performing gestures, and reading the view hierarchy to find something scrollable. It does not log, store, or send your screen anywhere. Read the source before enabling it, the same as you would for any accessibility app.
 
----
+## License
 
-## ⚠️ Permissions & privacy
-
-SerialTouch requests an **AccessibilityService**, which is a powerful capability. This app uses it
-**only** to perform gestures and read the view hierarchy for scrolling — it does **not** log, store,
-or transmit screen content anywhere. Review the source before enabling it, as you should with any
-accessibility app.
-
----
-
-## 📜 License
-
-All rights reserved. See [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).
